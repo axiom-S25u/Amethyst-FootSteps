@@ -1,3 +1,2 @@
-# Template Mod
-
-Edit about.md to change this
+# Amethyst Footsteps
+plays the ametyst sound from minecraft when u walk

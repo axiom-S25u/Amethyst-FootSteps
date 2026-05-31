@@ -1,107 +1,85 @@
 #include <Geode/Geode.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
-#include <Geode/modify/LevelEditorLayer.hpp>
 
 using namespace geode::prelude;
 
-struct FootstepData {
+struct PlayerStepState {
     int currentStep = 0;
     bool wasOnGround = false;
-    bool wasJumping = false;
     float footstepTimer = 0.0f;
     CCPoint lastPos;
     float landingCooldown = 0.0f;
 };
 
-static FootstepData shit;
-
-void playFootstepsLogic(PlayerObject* player, bool isPlatformer, float dt) {
+void playFootstepsLogic(PlayerObject* player, bool isPlatformer, float dt, PlayerStepState& s) {
     bool enabled = Mod::get()->getSettingValue<bool>("enabled");
     if (!enabled) return;
-    
+
     float volume = Mod::get()->getSettingValue<double>("volume");
-    
+
     if (!isPlatformer) return;
-    
+
     if (player->m_yVelocity > 0.0f) return;
-    
+
     bool onGround = player->m_isOnGround || player->m_isOnGround2 || player->m_isOnGround3;
-    
-    if (shit.landingCooldown > 0.0f) {
-        shit.landingCooldown -= dt;
+
+    if (s.landingCooldown > 0.0f) {
+        s.landingCooldown -= dt;
     }
-    
-    if (onGround && !shit.wasOnGround && shit.landingCooldown <= 0.0f) {
-        int stepNum = (shit.currentStep % 14) + 1;
+
+    if (onGround && !s.wasOnGround && s.landingCooldown <= 0.0f) {
+        int stepNum = (s.currentStep % 14) + 1;
         std::string filename = fmt::format("amestep{}.mp3", stepNum);
         std::string path = geode::utils::string::pathToString(Mod::get()->getResourcesDir() / filename);
-        
-        auto* sound = FMODAudioEngine::sharedEngine();
-        if (sound) {
-            sound->playEffect(path.c_str(), 1.0f, 1.0f, volume * 1.5f);
-        }
-        
-        shit.currentStep++;
-        shit.landingCooldown = 0.5f;
+
+        FMODAudioEngine::sharedEngine()->playEffect(path.c_str(), 1.0f, 1.0f, volume * 1.5f);
+
+        s.currentStep++;
+        s.landingCooldown = 0.35f;
     }
-    
+
     if (onGround) {
-        shit.footstepTimer -= dt;
-        
+        s.footstepTimer -= dt;
+
         CCPoint currentPos = player->getPosition();
-        float dist = ccpDistance(currentPos, shit.lastPos);
+        float dist = ccpDistance(currentPos, s.lastPos);
         bool moving = dist > 0.1f;
-        
-        if (moving && shit.footstepTimer <= 0.0f) {
-            int stepNum = (shit.currentStep % 14) + 1;
+
+        if (moving && s.footstepTimer <= 0.0f) {
+            int stepNum = (s.currentStep % 14) + 1;
             std::string filename = fmt::format("amestep{}.mp3", stepNum);
             std::string path = geode::utils::string::pathToString(Mod::get()->getResourcesDir() / filename);
-            
-            auto* sound = FMODAudioEngine::sharedEngine();
-            if (sound) {
-                sound->playEffect(path.c_str(), 1.0f, 1.0f, volume);
-            }
-            
-            shit.currentStep++;
-            shit.footstepTimer = 0.3f;
+
+            FMODAudioEngine::sharedEngine()->playEffect(path.c_str(), 1.0f, 1.0f, volume);
+
+            s.currentStep++;
+            s.footstepTimer = 0.22f; // idk it seems a little not lore accurate but works
         }
     }
-    
-    shit.wasOnGround = onGround;
-    shit.lastPos = player->getPosition();
+
+    s.wasOnGround = onGround;
+    s.lastPos = player->getPosition();
 }
 
 class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
+    struct Fields {
+        PlayerStepState p1;
+        PlayerStepState p2;
+    };
+
     bool init() {
         if (!GJBaseGameLayer::init()) return false;
-        
-        shit.currentStep = 0;
-        shit.wasOnGround = false;
-        shit.wasJumping = false;
-        shit.footstepTimer = 0.0f;
-        shit.lastPos = CCPointZero;
-        shit.landingCooldown = 0.0f;
-        
+
+        m_fields->p1 = PlayerStepState{};
+        m_fields->p2 = PlayerStepState{};
+
         return true;
     }
-    
+
     void update(float dt) {
         GJBaseGameLayer::update(dt);
-        
-        auto* player = m_player1;
-        if (!player) return;
-        
-        playFootstepsLogic(player, m_isPlatformer, dt);
-    }
-};
 
-class $modify(MyLevelEditorLayer, LevelEditorLayer) {
-    void update(float dt) {
-        LevelEditorLayer::update(dt);
-        
-        auto* player = m_player1;
-        if (!player) return;
-        
-        playFootstepsLogic(player, m_isPlatformer, dt);
+        if (m_player1) playFootstepsLogic(m_player1, m_isPlatformer, dt, m_fields->p1);
+        if (m_player2) playFootstepsLogic(m_player2, m_isPlatformer, dt, m_fields->p2);
     }
 };
